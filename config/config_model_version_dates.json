@@ -1,0 +1,9 @@
+{
+  "s2s_2025": {
+    "start_date": "2025-01-01",
+    "end_date": "2025-12-31",
+    "cadence": "odd_day_of_month",
+    "hindcast_years_back": 20,
+    "description": "IFS Cycle 49r1 reforecast cadence, full year 2025"
+  }
+}

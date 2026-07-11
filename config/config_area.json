@@ -1,0 +1,6 @@
+{
+  "south_asia": {
+    "area": [38.5, 66.5, 6.5, 100.5],
+    "description": "South Asia domain used for IFS S2S reforecast download"
+  }
+}
