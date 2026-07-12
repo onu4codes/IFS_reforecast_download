@@ -1,0 +1,9 @@
+{
+  "default": {
+    "zarr_store": "s2s_reforecast.zarr",
+    "zarr_store_sorted": "s2s_reforecast_sorted.zarr",
+    "workdir": "s2s_work",
+    "log_file": "logs/pipeline.log",
+    "description": "Main output zarr store, its time-sorted counterpart, scratch download directory, and single shared pipeline log file, all sibling to config/ and utils/ at the repo root"
+  }
+}

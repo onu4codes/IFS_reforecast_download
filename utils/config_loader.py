@@ -1,0 +1,213 @@
+"""
+utils/config_loader.py
+
+Single access point for all 4 config JSON files:
+    config/config_area.json
+    config/config_grid.json
+    config/config_variables.json
+    config/config_model_version_dates.json
+
+Every other module (date_generator, request_builder, postprocess,
+zarr_writer) and every top-level script should import from here rather
+than reading config/*.json directly or hardcoding paths.
+
+Validates structure on load so mistakes (missing keys, typos) surface
+immediately with a clear error, rather than failing deep inside a
+multi-hour batch run.
+
+This module does not print to the terminal -- it uses the standard
+logging module with no handlers attached, so top-level scripts can
+attach a file handler (or any handler) without this module needing
+changes.
+"""
+
+import json
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+REPO_ROOT = CONFIG_DIR.parent
+
+AREA_CONFIG_FILE = CONFIG_DIR / "config_area.json"
+GRID_CONFIG_FILE = CONFIG_DIR / "config_grid.json"
+VARIABLES_CONFIG_FILE = CONFIG_DIR / "config_variables.json"
+MODEL_DATES_CONFIG_FILE = CONFIG_DIR / "config_model_version_dates.json"
+PATHS_CONFIG_FILE = CONFIG_DIR / "config_paths.json"
+
+# Required keys for each named entry, per config file.
+_AREA_REQUIRED_KEYS = {"area"}
+_GRID_REQUIRED_KEYS = {"grid"}
+_VARIABLES_REQUIRED_KEYS = {
+    "cds_variable", "level_type", "level_value",
+    "leadtime_type", "leadtime_start", "leadtime_end", "leadtime_step",
+    "output_names", "postprocess",
+}
+_MODEL_DATES_REQUIRED_KEYS = {
+    "start_date", "end_date", "cadence", "hindcast_years_back",
+}
+_PATHS_REQUIRED_KEYS = {"zarr_store", "zarr_store_sorted", "workdir", "log_file"}
+
+
+class ConfigError(Exception):
+    """Raised for any problem loading or validating a config file."""
+
+
+def _load_json(path):
+    if not path.exists():
+        raise ConfigError(f"Config file not found: {path}")
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ConfigError(f"Invalid JSON in {path}: {e}") from e
+    if not isinstance(data, dict):
+        raise ConfigError(f"Expected a JSON object (dict) at top level of {path}, got {type(data).__name__}")
+    return data
+
+
+def _validate_entries(data, required_keys, source_path):
+    for entry_name, entry in data.items():
+        if not isinstance(entry, dict):
+            raise ConfigError(
+                f"Entry '{entry_name}' in {source_path} must be an object, got {type(entry).__name__}"
+            )
+        missing = required_keys - entry.keys()
+        if missing:
+            raise ConfigError(
+                f"Entry '{entry_name}' in {source_path} is missing required keys: {sorted(missing)}"
+            )
+
+
+def load_area_config():
+    """Load and validate config_area.json. Returns the full dict."""
+    data = _load_json(AREA_CONFIG_FILE)
+    _validate_entries(data, _AREA_REQUIRED_KEYS, AREA_CONFIG_FILE)
+    logger.info(f"Loaded area config: {list(data.keys())}")
+    return data
+
+
+def load_grid_config():
+    """Load and validate config_grid.json. Returns the full dict."""
+    data = _load_json(GRID_CONFIG_FILE)
+    _validate_entries(data, _GRID_REQUIRED_KEYS, GRID_CONFIG_FILE)
+    logger.info(f"Loaded grid config: {list(data.keys())}")
+    return data
+
+
+def load_variables_config():
+    """Load and validate config_variables.json. Returns the full dict."""
+    data = _load_json(VARIABLES_CONFIG_FILE)
+    _validate_entries(data, _VARIABLES_REQUIRED_KEYS, VARIABLES_CONFIG_FILE)
+    logger.info(f"Loaded variables config: {list(data.keys())}")
+    return data
+
+
+def load_model_dates_config():
+    """Load and validate config_model_version_dates.json. Returns the full dict."""
+    data = _load_json(MODEL_DATES_CONFIG_FILE)
+    _validate_entries(data, _MODEL_DATES_REQUIRED_KEYS, MODEL_DATES_CONFIG_FILE)
+    logger.info(f"Loaded model dates config: {list(data.keys())}")
+    return data
+
+
+def load_paths_config():
+    """Load and validate config_paths.json. Returns the full dict."""
+    data = _load_json(PATHS_CONFIG_FILE)
+    _validate_entries(data, _PATHS_REQUIRED_KEYS, PATHS_CONFIG_FILE)
+    logger.info(f"Loaded paths config: {list(data.keys())}")
+    return data
+
+
+def _lookup(data, key, config_label):
+    if key not in data:
+        raise ConfigError(
+            f"Unknown {config_label} key '{key}'. Available: {sorted(data.keys())}"
+        )
+    return data[key]
+
+
+def get_area(key):
+    """Return the 'area' list for a named area config, e.g. get_area('south_asia')."""
+    data = load_area_config()
+    entry = _lookup(data, key, "area")
+    return entry["area"]
+
+
+def get_grid(key):
+    """Return the 'grid' list for a named grid config, e.g. get_grid('grids_1deg')."""
+    data = load_grid_config()
+    entry = _lookup(data, key, "grid")
+    return entry["grid"]
+
+
+def get_variable_group(name):
+    """Return the full config dict for one variable group, e.g. get_variable_group('wind_msl')."""
+    data = load_variables_config()
+    return _lookup(data, name, "variable group")
+
+
+def get_model_dates_config(key):
+    """Return the full config dict for one named date-range config, e.g. get_model_dates_config('s2s_2025')."""
+    data = load_model_dates_config()
+    return _lookup(data, key, "model dates")
+
+
+def get_zarr_path(key="default"):
+    """
+    Return the absolute Path to the target zarr store for a named
+    paths config, e.g. get_zarr_path('default').
+
+    Paths in config_paths.json are given relative to the repo root
+    (the parent directory of config/ and utils/), and are resolved
+    here to an absolute path regardless of the caller's working
+    directory.
+    """
+    data = load_paths_config()
+    entry = _lookup(data, key, "paths")
+    return (REPO_ROOT / entry["zarr_store"]).resolve()
+
+
+def get_zarr_sorted_path(key="default"):
+    """
+    Return the absolute Path to the time-sorted counterpart of the
+    main zarr store, e.g. get_zarr_sorted_path('default'). Same
+    repo-root-relative resolution as get_zarr_path().
+    """
+    data = load_paths_config()
+    entry = _lookup(data, key, "paths")
+    return (REPO_ROOT / entry["zarr_store_sorted"]).resolve()
+
+
+def get_workdir_path(key="default"):
+    """
+    Return the absolute Path to the scratch download directory for a
+    named paths config, e.g. get_workdir_path('default'). Same
+    repo-root-relative resolution as get_zarr_path().
+    """
+    data = load_paths_config()
+    entry = _lookup(data, key, "paths")
+    return (REPO_ROOT / entry["workdir"]).resolve()
+
+
+def get_log_path(key="default"):
+    """
+    Return the absolute Path to the single shared pipeline log file
+    for a named paths config, e.g. get_log_path('default'). Same
+    repo-root-relative resolution as get_zarr_path()/get_workdir_path().
+
+    This is the ONE log file the entire pipeline writes to -- all
+    top-level scripts and utils/ modules funnel their log records here
+    via the standard logging propagation to the root logger, so there
+    is a single continuous record of a whole batch run, not one file
+    per date or per script.
+    """
+    data = load_paths_config()
+    entry = _lookup(data, key, "paths")
+    return (REPO_ROOT / entry["log_file"]).resolve()
+
+
+def list_variable_groups():
+    """Return the list of all variable group names defined in config_variables.json."""
+    return list(load_variables_config().keys())
