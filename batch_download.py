@@ -64,12 +64,12 @@ def _worker_logging_init(log_queue):
     root_logger.addHandler(logging.handlers.QueueHandler(log_queue))
 
 
-def _process_one_date_worker(model_date, area_key, grid_key, paths_key, dates_config_key):
+def _process_one_date_worker(model_date, area_key, grid_key, paths_key, dates_config_key, variable_set):
     """
-    Runs in a worker process. Downloads all variable groups for one
-    model date and builds the merged in-memory dataset. Does NOT write
-    to the zarr store -- returns the dataset (and downloaded file
-    paths) to the main process for that.
+    Runs in a worker process. Downloads all variable groups (within
+    the given variable set) for one model date and builds the merged
+    in-memory dataset. Does NOT write to the zarr store -- returns the
+    dataset (and downloaded file paths) to the main process for that.
 
     Returns one of:
         ("success", model_date, dataset, downloaded_paths_dict)
@@ -83,17 +83,18 @@ def _process_one_date_worker(model_date, area_key, grid_key, paths_key, dates_co
             grid_key=grid_key,
             paths_key=paths_key,
             dates_config_key=dates_config_key,
+            variable_set=variable_set,
         )
-        ds = zarr_writer.build_dataset(downloaded, model_date)
+        ds = zarr_writer.build_dataset(downloaded, model_date, variable_set=variable_set)
         # Force all data into memory (plain numpy, not lazy/dask-backed)
         # so the dataset can be safely pickled back to the main process.
         ds = ds.load()
 
-        log.info(f"Worker finished download+build for model_date={model_date}")
+        log.info(f"Worker finished download+build for model_date={model_date} (set='{variable_set}')")
         return ("success", model_date, ds, downloaded)
 
     except Exception as e:
-        log.error(f"Worker failed for model_date={model_date}: {e}")
+        log.error(f"Worker failed for model_date={model_date} (set='{variable_set}'): {e}")
         return ("failed", model_date, str(e))
 
 
@@ -127,11 +128,15 @@ def run_batch_download(
     area_key="south_asia",
     grid_key="grids_1deg",
     paths_key="default",
+    variable_set="combination_1",
     n_workers=4,
 ):
     """
     Main orchestration function. See module docstring for the full
     pipeline description.
+
+    Defaults to variable_set='combination_1' so existing calls that
+    don't pass this parameter keep working unchanged.
     """
     zarr_path = config_loader.get_zarr_path(paths_key)
 
@@ -148,7 +153,7 @@ def run_batch_download(
     logger.info(
         f"Batch run starting: {len(all_pairs)} total model dates, "
         f"{n_skipped} already done (skipped), {len(pending)} pending. "
-        f"zarr={zarr_path}, n_workers={n_workers}"
+        f"zarr={zarr_path}, variable_set='{variable_set}', n_workers={n_workers}"
     )
 
     n_success = 0
@@ -166,7 +171,7 @@ def run_batch_download(
         ) as executor:
             futures = {
                 executor.submit(
-                    _process_one_date_worker, model_date, area_key, grid_key, paths_key, dates_config_key
+                    _process_one_date_worker, model_date, area_key, grid_key, paths_key, dates_config_key, variable_set
                 ): model_date
                 for model_date, _ in pending
             }
@@ -231,6 +236,8 @@ def _parse_args():
     p.add_argument("--area-key", default="south_asia", help="Named area config key (default: south_asia)")
     p.add_argument("--grid-key", default="grids_1deg", help="Named grid config key (default: grids_1deg)")
     p.add_argument("--paths-key", default="default", help="Named paths config key (default: default)")
+    p.add_argument("--variable-set", default="combination_1",
+                    help="Named variable set key in config_variables.json (default: combination_1)")
     p.add_argument("--n-workers", type=int, default=4, help="Number of parallel date workers (default: 4)")
     return p.parse_args()
 
@@ -245,6 +252,7 @@ def main():
             area_key=args.area_key,
             grid_key=args.grid_key,
             paths_key=args.paths_key,
+            variable_set=args.variable_set,
             n_workers=args.n_workers,
         )
     finally:

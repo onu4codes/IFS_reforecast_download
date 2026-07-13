@@ -81,13 +81,16 @@ def drop_scalar_coords(ds):
     return ds.drop_vars(drop_these, errors="ignore")
 
 
-def process_group_file(path, group_name):
+def process_group_file(path, group_name, variable_set="combination_1"):
     """
     Full pipeline for one group's GRIB file: load, standardize, drop
     scalar cruft, apply postprocess, apply output_names renaming
     (unless postprocess already handled naming).
+
+    Defaults to variable_set='combination_1' so existing calls that
+    don't pass this parameter keep working unchanged.
     """
-    group_config = config_loader.get_variable_group(group_name)
+    group_config = config_loader.get_variable_group(group_name, variable_set=variable_set)
 
     ds = load_group(path)
     ds = standardize_dims(ds)
@@ -100,18 +103,18 @@ def process_group_file(path, group_name):
         rename_map = {k: v for k, v in output_names.items() if k in ds.data_vars}
         ds = ds.rename(rename_map)
 
-    logger.info(f"Processed group '{group_name}' from {path} -> vars {list(ds.data_vars)}")
+    logger.info(f"Processed group '{group_name}' (set='{variable_set}') from {path} -> vars {list(ds.data_vars)}")
     return ds
 
 
-def _get_target_steps(group_names):
+def _get_target_steps(group_names, variable_set="combination_1"):
     """
     Derive the common step axis (0..max_day) from the variable groups'
     own leadtime config, asserting all groups agree on the same range.
     """
     max_days = set()
     for group_name in group_names:
-        group_config = config_loader.get_variable_group(group_name)
+        group_config = config_loader.get_variable_group(group_name, variable_set=variable_set)
         max_days.add(group_config["leadtime_end"] // group_config["leadtime_step"])
 
     if len(max_days) != 1:
@@ -123,34 +126,37 @@ def _get_target_steps(group_names):
     return np.arange(0, max_day + 1)
 
 
-def build_dataset(group_file_map, model_date):
+def build_dataset(group_file_map, model_date, variable_set="combination_1"):
     """
     Build the full merged dataset for one model version date.
 
     group_file_map: dict of {group_name: grib_file_path}
     model_date: datetime.date for this model version date
 
+    Defaults to variable_set='combination_1' so existing calls that
+    don't pass this parameter keep working unchanged.
+
     Returns the merged xarray.Dataset with dims (time, step, lat, lon),
     ready to write/append to the target Zarr store.
     """
     processed = {
-        group_name: process_group_file(path, group_name)
+        group_name: process_group_file(path, group_name, variable_set=variable_set)
         for group_name, path in group_file_map.items()
     }
 
     merged = xr.merge(list(processed.values()), join="outer")
 
-    target_steps = _get_target_steps(group_file_map.keys())
+    target_steps = _get_target_steps(group_file_map.keys(), variable_set=variable_set)
     merged = merged.reindex(step=target_steps)
 
     merged.attrs.update({
-        "description": f"S2S IFS reforecast, model version date {model_date:%Y-%m-%d}",
+        "description": f"S2S IFS reforecast, model version date {model_date:%Y-%m-%d}, variable_set={variable_set}",
         "n_lead_time": int(target_steps.max()),
         "step_range": f"0 to {int(target_steps.max())}",
     })
 
     logger.info(
-        f"Built merged dataset for model_date={model_date}: "
+        f"Built merged dataset for model_date={model_date} (set='{variable_set}'): "
         f"vars={list(merged.data_vars)}, dims={dict(merged.sizes)}"
     )
     return merged

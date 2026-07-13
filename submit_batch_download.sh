@@ -25,6 +25,22 @@
 # partway through, just resubmit -- batch_download.py's resume-skip
 # logic picks up exactly where it left off.
 #
+# TO RUN A DIFFERENT SCENARIO (e.g. rainfall-only at 0.25 degree
+# instead of the full variable set at 1 degree), edit the python
+# command below:
+#   --variable-set  : which named group of variables to download, from
+#                      config_variables.json (e.g. "combination_1" for
+#                      everything, "rainfall_only" for just precip)
+#   --grid-key      : which named resolution, from config_grid.json
+#                      (e.g. "grids_1deg", "grids_0p25deg")
+#   --paths-key     : which named output location, from config_paths.json
+#                      -- IMPORTANT: use a DIFFERENT paths-key for a
+#                      different variable_set/grid/area combination, since
+#                      mixing incompatible dimensions into the same zarr
+#                      store will corrupt it. Add a new named entry to
+#                      config_paths.json first if one doesn't already
+#                      exist for this scenario.
+#
 # BEFORE SUBMITTING, edit:
 #   --partition   : set to a valid partition on your cluster
 #                    (check with `sinfo`)
@@ -34,8 +50,10 @@
 #   --time        : 12:00:00 assumes the 'general' partition's cap;
 #                    with n_workers=4 and ~186 dates at ~5 min/date
 #                    sequential, expect roughly ~4 hours for a full
-#                    year -- adjust if your date range or worker count
-#                    differs
+#                    year at the full variable set -- a smaller
+#                    variable_set (like rainfall_only) or fewer dates
+#                    will finish faster; adjust down if you're confident,
+#                    or just leave the generous default
 #   --mem         : 32G is a generous safety margin; each worker only
 #                    holds one date's data in memory at a time (a few
 #                    hundred MB), so this has headroom
@@ -67,6 +85,7 @@ python batch_download.py \
     --area-key south_asia \
     --grid-key grids_1deg \
     --paths-key default \
+    --variable-set combination_1 \
     --n-workers 4
 
 echo "Job finished at $(date)"

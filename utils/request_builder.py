@@ -56,21 +56,25 @@ def build_leadtime_hour(group_config):
         )
 
 
-def build_request(group_name, model_date, hyear_list, area_key, grid_key):
+def build_request(group_name, model_date, hyear_list, area_key, grid_key, variable_set="combination_1"):
     """
-    Build the full cdsapi request dict for one variable group, one
-    model version date, its hindcast year list, and named area/grid
-    configs.
+    Build the full cdsapi request dict for one variable group (within
+    a named variable set), one model version date, its hindcast year
+    list, and named area/grid configs.
+
+    Defaults to variable_set='combination_1' so existing calls that
+    don't pass this parameter keep working unchanged.
 
     Returns (dataset_name, request_dict) -- dataset_name is always
     "s2s-reforecasts" for now, returned alongside the request dict for
     convenience at the call site (client.retrieve(dataset_name, request)).
     """
-    group_config = config_loader.get_variable_group(group_name)
+    group_config = config_loader.get_variable_group(group_name, variable_set=variable_set)
 
     if group_config["level_type"] == "pressure" and not group_config["level_value"]:
         raise ConfigError(
-            f"Variable group '{group_name}' has level_type='pressure' but no level_value defined."
+            f"Variable group '{group_name}' (in set '{variable_set}') has level_type='pressure' "
+            f"but no level_value defined."
         )
 
     request = {
@@ -95,7 +99,7 @@ def build_request(group_name, model_date, hyear_list, area_key, grid_key):
         request["level_value"] = group_config["level_value"]
 
     logger.info(
-        f"Built request for group='{group_name}' model_date={model_date} "
+        f"Built request for group='{group_name}' (set='{variable_set}') model_date={model_date} "
         f"n_hyears={len(hyear_list)} area='{area_key}' grid='{grid_key}'"
     )
     return DATASET, request

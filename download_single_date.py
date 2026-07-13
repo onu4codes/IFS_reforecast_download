@@ -50,11 +50,15 @@ def download_single_date_files(
     grid_key="grids_1deg",
     paths_key="default",
     dates_config_key="s2s_2025",
+    variable_set="combination_1",
     client=None,
 ):
     """
-    Download all (or a specified subset of) variable groups for one
-    model version date.
+    Download all (or a specified subset of) variable groups, within a
+    named variable set, for one model version date.
+
+    Defaults to variable_set='combination_1' so existing calls that
+    don't pass this parameter keep working unchanged.
 
     Returns a dict of {group_name: downloaded_file_path}.
 
@@ -63,7 +67,7 @@ def download_single_date_files(
     (that's the caller's decision).
     """
     if groups is None:
-        groups = config_loader.list_variable_groups()
+        groups = config_loader.list_variable_groups(variable_set=variable_set)
 
     dates_config = config_loader.get_model_dates_config(dates_config_key)
     hindcast_years_back = dates_config["hindcast_years_back"]
@@ -78,18 +82,18 @@ def download_single_date_files(
     downloaded = {}
     for group_name in groups:
         dataset, request = request_builder.build_request(
-            group_name, model_date, hyear_list, area_key, grid_key
+            group_name, model_date, hyear_list, area_key, grid_key, variable_set=variable_set
         )
         target = workdir / zarr_writer.group_filename(group_name, model_date)
 
-        logger.info(f"Retrieving group='{group_name}' model_date={model_date} -> {target}")
+        logger.info(f"Retrieving group='{group_name}' (set='{variable_set}') model_date={model_date} -> {target}")
         client.retrieve(dataset, request).download(str(target))
         logger.info(f"Downloaded group='{group_name}' -> {target}")
 
         downloaded[group_name] = target
 
     logger.info(
-        f"Completed all {len(downloaded)} group(s) for model_date={model_date}: "
+        f"Completed all {len(downloaded)} group(s) for model_date={model_date} (set='{variable_set}'): "
         f"{list(downloaded.keys())}"
     )
     return downloaded
@@ -128,7 +132,9 @@ def _parse_args():
     p = argparse.ArgumentParser(description="Download one model version date's S2S reforecast data")
     p.add_argument("--model-date", required=True, help="Model version date, YYYY-MM-DD")
     p.add_argument("--groups", nargs="+", default=None,
-                    help="Variable group names to download (default: all groups in config_variables.json)")
+                    help="Variable group names to download (default: all groups in the chosen variable set)")
+    p.add_argument("--variable-set", default="combination_1",
+                    help="Named variable set key in config_variables.json (default: combination_1)")
     p.add_argument("--area-key", default="south_asia", help="Named area config key (default: south_asia)")
     p.add_argument("--grid-key", default="grids_1deg", help="Named grid config key (default: grids_1deg)")
     p.add_argument("--paths-key", default="default", help="Named paths config key (default: default)")
@@ -151,6 +157,7 @@ def main():
             grid_key=args.grid_key,
             paths_key=args.paths_key,
             dates_config_key=args.dates_config_key,
+            variable_set=args.variable_set,
         )
     except (ConfigError, Exception) as e:
         logger.error(f"download_single_date_files failed for {model_date}: {e}")

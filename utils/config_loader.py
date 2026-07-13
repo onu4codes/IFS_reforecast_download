@@ -97,10 +97,24 @@ def load_grid_config():
 
 
 def load_variables_config():
-    """Load and validate config_variables.json. Returns the full dict."""
+    """
+    Load and validate config_variables.json. Returns the full dict.
+
+    Structure is nested: {variable_set_name: {group_name: {group_config}}}.
+    Each group_config within every variable set is validated against
+    _VARIABLES_REQUIRED_KEYS.
+    """
     data = _load_json(VARIABLES_CONFIG_FILE)
-    _validate_entries(data, _VARIABLES_REQUIRED_KEYS, VARIABLES_CONFIG_FILE)
-    logger.info(f"Loaded variables config: {list(data.keys())}")
+
+    for set_name, groups in data.items():
+        if not isinstance(groups, dict):
+            raise ConfigError(
+                f"Variable set '{set_name}' in {VARIABLES_CONFIG_FILE} must be an object "
+                f"of group_name -> group_config, got {type(groups).__name__}"
+            )
+        _validate_entries(groups, _VARIABLES_REQUIRED_KEYS, f"{VARIABLES_CONFIG_FILE} (set '{set_name}')")
+
+    logger.info(f"Loaded variables config, sets: {list(data.keys())}")
     return data
 
 
@@ -142,10 +156,17 @@ def get_grid(key):
     return entry["grid"]
 
 
-def get_variable_group(name):
-    """Return the full config dict for one variable group, e.g. get_variable_group('wind_msl')."""
+def get_variable_group(group_name, variable_set="combination_1"):
+    """
+    Return the full config dict for one variable group within a named
+    variable set, e.g. get_variable_group('precip', variable_set='rainfall_only').
+
+    Defaults to variable_set='combination_1' so existing calls that don't
+    pass this parameter keep working unchanged.
+    """
     data = load_variables_config()
-    return _lookup(data, name, "variable group")
+    groups = _lookup(data, variable_set, "variable set")
+    return _lookup(groups, group_name, f"variable group (in set '{variable_set}')")
 
 
 def get_model_dates_config(key):
@@ -208,6 +229,19 @@ def get_log_path(key="default"):
     return (REPO_ROOT / entry["log_file"]).resolve()
 
 
-def list_variable_groups():
-    """Return the list of all variable group names defined in config_variables.json."""
+def list_variable_groups(variable_set="combination_1"):
+    """
+    Return the list of all variable group names within a named variable
+    set, e.g. list_variable_groups('rainfall_only') -> ['precip'].
+
+    Defaults to variable_set='combination_1' so existing calls that don't
+    pass this parameter keep working unchanged.
+    """
+    data = load_variables_config()
+    groups = _lookup(data, variable_set, "variable set")
+    return list(groups.keys())
+
+
+def list_variable_sets():
+    """Return the list of all named variable set names defined in config_variables.json."""
     return list(load_variables_config().keys())
