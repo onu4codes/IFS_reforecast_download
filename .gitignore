@@ -5,6 +5,10 @@ logs/
 # --- Zarr stores ---
 *.zarr/
 
+#---Tar files ---
+*.tar
+
+
 # --- Credentials -- NEVER commit these ---
 .cdsapirc
 .ecmwfapirc
