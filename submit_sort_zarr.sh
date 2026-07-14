@@ -50,7 +50,7 @@ conda activate climate
 cd "$SLURM_SUBMIT_DIR"
 
 python sort_zarr_by_time.py \
-    --paths-key rainfall_0p25deg \
+    --paths-key s2s_downscaling \
     --chunk-time 20
 
 echo "Job finished at $(date)"

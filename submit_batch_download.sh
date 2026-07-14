@@ -82,10 +82,10 @@ cd "$SLURM_SUBMIT_DIR"
 
 python batch_download.py \
     --dates-config-key s2s_2025_monsoon \
-    --area-key south_asia_2 \
-    --grid-key grids_0p25deg \
-    --paths-key rainfall_0p25deg \
-    --variable-set rainfall_only \
+    --area-key south_asia \
+    --grid-key grids_1deg \
+    --paths-key s2s_downscaling \
+    --variable-set combination_2 \
     --n-workers 4
 
 echo "Job finished at $(date)"

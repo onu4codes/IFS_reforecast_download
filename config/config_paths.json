@@ -12,6 +12,13 @@
     "workdir": "s2s_work_rainfall_0p25",
     "log_file": "logs/pipeline_rainfall_0p25.log",
     "description": "Rainfall-only download at 0.25 degree resolution"
+  },
+  "s2s_downscaling": {
+    "zarr_store": "s2s_predictors.zarr",
+    "zarr_store_sorted": "s2s_predictors_sorted.zarr",
+    "workdir": "s2s_work_predictors",
+    "log_file": "logs/pipeline_predictors.log",
+    "description": "Predictor variables for downscaling, including 2m temperature, pressure-level variables, and total precipitation  "
   }
 
 }
