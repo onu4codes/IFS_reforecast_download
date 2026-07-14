@@ -5,5 +5,12 @@
     "cadence": "odd_day_of_month",
     "hindcast_years_back": 20,
     "description": "IFS Cycle 49r1 reforecast cadence, full year 2025"
+  },
+  "s2s_2025_monsoon": {
+    "start_date": "2025-04-21",
+    "end_date": "2025-10-04",
+    "cadence": "odd_day_of_month",
+    "hindcast_years_back": 20,
+    "description": "IFS Cycle 49r1 reforecast cadence, full year 2025, but only the monsoon season (April 21 to October 4)"
   }
 }
